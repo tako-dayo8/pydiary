@@ -1,7 +1,7 @@
 import sqlite3
 import os
 
-db_path = f"{os.path.dirname(__file__)}/database.db"
+db_path = f"{os.path.dirname(__file__)}/db/database.db"
 
 class DatabaseManager:
     """
@@ -31,7 +31,8 @@ class DatabaseManager:
             updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
             activity_log TEXT NOT NULL,
             comment TEXT,
-            todo TEXT
+            todo TEXT,
+            ai_comment TEXT
         )
         """
 
@@ -40,12 +41,20 @@ class DatabaseManager:
         self.connection.commit()
         self.connection.close()
         
+    def new_connection(self):
+        """
+        新しいデータベース接続を返します。
+        """
+        self.connection = sqlite3.connect(db_path, check_same_thread=False)
+        return self.connection
+
     def new_cursor(self):
         """
         新しいデータベース接続を返します。
         """
         self.connection = sqlite3.connect(db_path, check_same_thread=False)
         return self.connection.cursor()
+        
     
     def close(self):
         """
@@ -56,3 +65,5 @@ class DatabaseManager:
             self.connection = None
             self.cursor = None
     
+
+db = DatabaseManager()

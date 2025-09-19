@@ -8,7 +8,8 @@ authors = [
     { name = "tako1dayo", email = "akhstudio22@gmail.com" }
 ]
 dependencies = [
-  "flet==0.28.3"
+  "flet==0.28.3",
+  "google-genai (>=1.36.0,<2.0.0)"
 ]
 
 [tool.flet]

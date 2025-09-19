@@ -1,210 +1,59 @@
-import datetime , winreg , platform
-
 import flet as ft
 
+from gemini import generate_ai_comment
 
-from db import DatabaseManager
+# helper
+from helper.get_theme import get_theme
+from helper.get_show_page import get_show_page , showPage
+from helper.get_diary import  get_all_diarys , get_latest_diary
 
-db = DatabaseManager()
+# events
+from events.change_theme import chenge_theme
+from events.change_page import change_page
+from events.save_diary import save_diary
+
+# components
+from components.theme_mode_toggle import theme_mode_toggle
+from components.diary_save_field import activity_log_field , comment_field , todo_field , save_botton
+from components.diary_card import create_diary_card
+
 
 def main(page: ft.Page):
-
-    def get_theme():
-        """
-        現在のテーマモードをデータベースから取得する関数
-        データベースに保存されていない場合はデフォルトのダーク
-        将来的にosのテーマ設定を取得する機能を追加する予定
-        """
-        # 現在のテーマモードをデータベースから取得
-        cursor = db.new_cursor()
-        try:
-            cursor.execute("SELECT value FROM settings WHERE key = 'theme_mode'")
-            theme_mode = cursor.fetchone()
-
-            if theme_mode is None:
-                if platform.system() == "Windows":
-                    # Windowsのテーマ設定を取得
-                    try:
-                        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as key:
-                            theme_mode_value = winreg.QueryValueEx(key, "AppsUseLightTheme")[0]
-                            if theme_mode_value == 0:
-                                return ft.ThemeMode.DARK
-                            else:
-                                return ft.ThemeMode.LIGHT
-                    except:
-                        # 何かしらのエラーが発生した場合はデフォルトでダークモードを使用
-                        return ft.ThemeMode.DARK
-                else:
-                    # 他のOSではデフォルトでダークモードを使用
-                    return ft.ThemeMode.DARK
-            else:
-                return ft.ThemeMode(theme_mode[0])
-
-        finally:
-            db.close()
+    global theme_mode_toggle , activity_log_field , comment_field , todo_field # グローバル変数として宣言
 
     # ページの初期設定
     page.title = "PyDiary"
+    # スクロールを可能にする
+    page.scroll = ft.ScrollMode.AUTO
     # ページのテーマモードをデータベースから取得
     page.theme_mode = get_theme()
-
-    def chenge_theme(e):
-        # ページのテーマモードを切り替える
-        if page.theme_mode == ft.ThemeMode.DARK:
-            page.theme_mode = ft.ThemeMode.LIGHT
-
-            # フローティングアクションボタンのアイコンを変更
-            page.floating_action_button.bgcolor = ft.Colors.LIME_300
-
-            # テキストフィールドのボーダーカラーを変更
-            activity_log_field.border_color = ft.Colors.BLACK
-            comment_field.border_color = ft.Colors.BLACK
-            todo_field.border_color = ft.Colors.BLACK
-        else:
-            page.theme_mode = ft.ThemeMode.DARK
-
-            # フローティングアクションボタンのアイコンを変更
-            page.floating_action_button.bgcolor = ft.Colors.BLUE_600
-
-            # テキストフィールドのボーダーカラーを変更
-            activity_log_field.border_color = ft.Colors.BLUE_300
-            comment_field.border_color = ft.Colors.BLUE_300
-            todo_field.border_color = ft.Colors.BLUE_300
-
-        # アイコンを切り替える
-        dark_mode_toggle.icon = ft.Icons.DARK_MODE if page.theme_mode == ft.ThemeMode.DARK else ft.Icons.LIGHT_MODE
-        
-        # データベースにテーマ設定を保存
-        cursor = db.new_cursor()
-
-        try:
-            cursor.execute(
-                """
-                INSERT INTO settings (key, value)
-                VALUES (?, ?)
-                ON CONFLICT(key) DO UPDATE SET value=excluded.value
-                """,
-                ("theme_mode", page.theme_mode.value)
-            )
-
-            db.connection.commit()
-        finally:
-            db.close()
-            
-
-        # ページを更新してテーマの変更を反映
-        page.update()
-
-    def save_diary(e):
-        """
-        日記の内容を保存する関数
-        """
-    
-        activity_log = activity_log_field.value
-        comment = comment_field.value
-        todo = todo_field.value
-
-        created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        updated_at = created_at  # 保存時点の日時を使用
-
-        # 入力チェック
-        if not activity_log:
-            page.open(ft.SnackBar(
-                ft.Text("今日やったことは必須です！"),
-                bgcolor=ft.Colors.RED_500,
-            ))
-            page.update()
-            return
-
-        print(f"Activity Log: {activity_log}")
-        print(f"Comment: {comment}")    
-        print(f"TODO: {todo}")
-        print(f"Created At: {created_at}")
-        print(f"Updated At: {updated_at}")
-        
-        # データベースに保存
-        cursor = db.new_cursor()
-        try:
-            cursor.execute(
-                """
-                INSERT INTO diaries (activity_log, comment, todo, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (activity_log, comment, todo, created_at, updated_at)
-            )
-            db.connection.commit()
-
-            # 保存後にフィールドをクリア
-            activity_log_field.value = ""
-            comment_field.value = ""
-            todo_field.value = ""
-
-            page.open(ft.SnackBar(
-                ft.Text("日記を保存しました！"),
-                bgcolor=ft.Colors.GREEN_500,
-            ))
-            page.update()
-        except Exception as e:
-            print(f"Error saving diaries: {e}")
-            page.open(ft.SnackBar(
-                ft.Text("日記を保存しました！"),
-                bgcolor=ft.Colors.RED_500,
-            ))
-            page.update()
-        finally:
-            db.close()
-
-    dark_mode_toggle = ft.IconButton(
-        icon=ft.Icons.DARK_MODE if page.theme_mode == ft.ThemeMode.DARK else ft.Icons.LIGHT_MODE,
-        tooltip="ダークモード切替",
-        on_click=chenge_theme,
-    )
+    # デフォルトの大きさを設定
+    page.window.width = 550
+    page.window.height = 650
 
 
-    hint_text_style = ft.TextStyle(
-        color=ft.Colors.GREY_500,
-    )
-
-    textfield_border_color = ft.Colors.BLUE_300 if page.theme_mode == ft.ThemeMode.DARK else ft.Colors.BLACK
-
-    activity_log_field = ft.TextField(
-        label="今日やったこと", 
-        border_color=textfield_border_color,
-        hint_text="今日の活動や出来事を記録",
-        hint_style=hint_text_style,
-        multiline=True, 
-    )
-
-    comment_field = ft.TextField(
-        label="コメント", 
-        border_color=textfield_border_color,
-        hint_text="コメントや感想など",
-        hint_style=hint_text_style,
-        multiline=True, 
-    )
-
-    todo_field = ft.TextField(
-        label="今後やること、TODO", 
-        border_color=textfield_border_color,
-        hint_text="TODOや目標など",
-        hint_style=hint_text_style,
-        multiline=True, 
-    )
-
-    # フローティングアクションボタンの設定
-    page.floating_action_button = ft.FloatingActionButton(
-        icon=ft.Icons.ADD, 
-        on_click=save_diary, 
-        bgcolor=ft.Colors.LIME_300 if page.theme_mode == ft.ThemeMode.LIGHT else ft.Colors.BLUE_600,
-    )
-    page.add(
-        ft.AppBar(
-            title=ft.Text("PyDiary"),
-            actions=[
-                dark_mode_toggle,
-            ]
+    pages = [
+        # 履歴ページ
+        ft.ListView(
+            [
+            ft.Column(
+                    [
+                        ft.Text("AIからの最新コメント", size=16, weight="bold"),
+                        ft.Text(value=get_latest_diary().ai_comment, size=14) if get_latest_diary() else ft.Text("AIコメントはここに表示されます。", size=14),
+                    ],
+                    spacing=10,
+            ),
+            *([
+                create_diary_card(diary.activity_log, diary.comment)
+                for diary in get_all_diarys()
+            ] if get_all_diarys() else [
+                ft.Text("まだ日記がありません。")
+            ]),
+            ],
+            expand=True,
+            spacing=20,
         ),
-        ft.Text("Welcome to PyDiary!"),
+        # 記録ページ
         ft.Column(
             [
                 activity_log_field,
@@ -213,13 +62,49 @@ def main(page: ft.Page):
             ],
             expand=True,
             spacing=20,
+        )
+    ]
+
+    # アイコンボタンのクリックイベントに関数を割り当て
+    theme_mode_toggle.on_click = chenge_theme
+
+    # フローティングアクションボタンのクリックイベントに関数を割り当て
+    save_botton.on_click = save_diary
+
+    # フローティングアクションボタンをページに追加
+    if get_show_page() == showPage.HISTORY:
+        page.floating_action_button = None
+    else:
+        page.floating_action_button = save_botton
+
+
+    page.add(
+        ft.AppBar(
+            title=ft.Text("PyDiary"),
+            actions=[
+                theme_mode_toggle
+            ]
         ),
+        ft.Text("Welcome to PyDiary!"),
+        ft.Row(
+            [
+                ft.CupertinoSlidingSegmentedButton(
+                    selected_index=get_show_page(),
+                    thumb_color=ft.Colors.BLUE_400,
+                    on_change=change_page,
+                    controls=[
+                        ft.Text("履歴"),
+                        ft.Text("記録"),
+                    ],
+                ),
+            ],
+            width=550,
+            alignment=ft.MainAxisAlignment.CENTER,
+        ),
+        ft.Container(
+            content=pages[get_show_page()],
+        )
     )
-
-
-
-
-
 
 if __name__ == "__main__":
     ft.app(target=main)
